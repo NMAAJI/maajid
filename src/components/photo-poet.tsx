@@ -10,6 +10,8 @@ import {
   Loader2,
   Wand2,
   RefreshCcw,
+  Play,
+  Volume2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,7 +27,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { generatePoemAction, improvePoemAction } from "@/app/actions";
+import {
+  generatePoemAction,
+  improvePoemAction,
+  textToSpeechAction,
+} from "@/app/actions";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
@@ -36,9 +42,11 @@ export default function PhotoPoet() {
   const [poem, setPoem] = useState<string | null>(null);
   const [initialPoem, setInitialPoem] = useState<string | null>(null);
   const [userEdits, setUserEdits] = useState<string>("");
+  const [audioDataUri, setAudioDataUri] = useState<string | null>(null);
 
   const [isGenerating, startGenerating] = useTransition();
   const [isImproving, startImproving] = useTransition();
+  const [isGeneratingAudio, startGeneratingAudio] = useTransition();
 
   const { toast } = useToast();
 
@@ -66,6 +74,7 @@ export default function PhotoPoet() {
         setPoem(null);
         setInitialPoem(null);
         setUserEdits("");
+        setAudioDataUri(null);
       };
       reader.readAsDataURL(file);
     }
@@ -81,6 +90,7 @@ export default function PhotoPoet() {
       return;
     }
     startGenerating(async () => {
+      setAudioDataUri(null);
       const result = await generatePoemAction(photoDataUri);
       if (result.error) {
         toast({
@@ -106,6 +116,7 @@ export default function PhotoPoet() {
       return;
     }
     startImproving(async () => {
+      setAudioDataUri(null);
       const result = await improvePoemAction({
         initialPoem,
         userEdits,
@@ -123,6 +134,25 @@ export default function PhotoPoet() {
           title: "Poem Improved!",
           description: "The AI has refined your poem.",
         });
+      }
+    });
+  };
+
+  const handleGenerateAudio = () => {
+    if (!poem) return;
+    startGeneratingAudio(async () => {
+      const result = await textToSpeechAction({
+        text: poem,
+        context: "An emotional and dramatic reading of a poem.",
+      });
+      if (result.error) {
+        toast({
+          title: "Audio Generation Failed",
+          description: result.error,
+          variant: "destructive",
+        });
+      } else if (result.audioDataUri) {
+        setAudioDataUri(result.audioDataUri);
       }
     });
   };
@@ -155,6 +185,7 @@ export default function PhotoPoet() {
     setPoem(null);
     setInitialPoem(null);
     setUserEdits("");
+    setAudioDataUri(null);
   };
 
   const placeholderImage = PlaceHolderImages[0];
@@ -247,11 +278,32 @@ export default function PhotoPoet() {
         {(isGenerating || poem) && (
           <Card className="flex flex-1 flex-col">
             <CardHeader>
-              <CardTitle className="font-headline">Poetic Vision</CardTitle>
-              <CardDescription>
-                Here is the AI-generated poem. Edit it as you wish, or ask the
-                AI to refine it.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="font-headline">
+                    Poetic Vision
+                  </CardTitle>
+                  <CardDescription>
+                    Here is the AI-generated poem. Edit it as you wish, or ask
+                    the AI to refine it.
+                  </CardDescription>
+                </div>
+                {!isGenerating && poem && (
+                  <Button
+                    onClick={handleGenerateAudio}
+                    size="icon"
+                    variant="outline"
+                    disabled={isGeneratingAudio}
+                  >
+                    {isGeneratingAudio ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Volume2 />
+                    )}
+                    <span className="sr-only">Read Poem Aloud</span>
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="flex-1 space-y-4">
               {isGenerating ? (
@@ -263,13 +315,27 @@ export default function PhotoPoet() {
                   <Skeleton className="h-6 w-[75%]" />
                 </div>
               ) : (
-                <Textarea
-                  value={poem ?? ""}
-                  onChange={(e) => setPoem(e.target.value)}
-                  rows={12}
-                  className="resize-none text-base leading-relaxed"
-                  placeholder="Your poem will appear here..."
-                />
+                <>
+                  {audioDataUri && (
+                    <audio
+                      controls
+                      src={audioDataUri}
+                      className="w-full"
+                    >
+                      Your browser does not support the audio element.
+                    </audio>
+                  )}
+                  <Textarea
+                    value={poem ?? ""}
+                    onChange={(e) => {
+                      setPoem(e.target.value);
+                      setAudioDataUri(null);
+                    }}
+                    rows={12}
+                    className="resize-none text-base leading-relaxed"
+                    placeholder="Your poem will appear here..."
+                  />
+                </>
               )}
             </CardContent>
             <CardFooter className="flex-col items-stretch gap-4">
